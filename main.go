@@ -8,6 +8,10 @@ import (
 	go_arg "github.com/alexflint/go-arg"
 )
 
+const (
+	DayFormat string = "2006-01-02"
+)
+
 var args struct {
 	Domain string `arg:"required,positional"`
 	Port   string `arg:"positional" default:"443"`
@@ -26,7 +30,7 @@ func main() {
 	defer conn.Close()
 	cert := conn.ConnectionState().PeerCertificates[0]
 	domain := cert.Subject.String()[3:]
-	expireDate, err := time.Parse("2006-01-02", cert.NotAfter.Format("2006-01-02"))
+	expireDate, err := time.Parse(DayFormat, cert.NotAfter.Format(DayFormat))
 	if err != nil {
 		panic(err)
 	}
