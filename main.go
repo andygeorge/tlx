@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/tls"
 	"fmt"
+	"time"
 
 	go_arg "github.com/alexflint/go-arg"
 )
@@ -13,11 +14,9 @@ var args struct {
 }
 
 func main() {
+	now := time.Now()
 	go_arg.MustParse(&args)
-
-	conf := &tls.Config{
-		InsecureSkipVerify: true,
-	}
+	conf := &tls.Config{InsecureSkipVerify: true}
 
 	conn, err := tls.Dial("tcp", args.Domain+":"+args.Port, conf)
 	if err != nil {
@@ -25,8 +24,19 @@ func main() {
 	}
 
 	defer conn.Close()
-	certs := conn.ConnectionState().PeerCertificates
-	for _, cert := range certs {
-		fmt.Println(cert.NotAfter.Format("2006-01-02"))
+	cert := conn.ConnectionState().PeerCertificates[0]
+	domain := cert.Subject.String()[3:]
+	expireDate, err := time.Parse("2006-01-02", cert.NotAfter.Format("2006-01-02"))
+	if err != nil {
+		panic(err)
 	}
+
+	days := expireDate.Sub(now).Hours() / 24
+
+	fmt.Printf(
+		"%s expires %s (in %.0f days)\n",
+		domain,
+		cert.NotAfter.Format("2006-01-02"),
+		days,
+	)
 }
