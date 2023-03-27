@@ -40,7 +40,7 @@ func main() {
 	fmt.Printf(
 		"%s expires %s (in %.0f days)\n",
 		domain,
-		cert.NotAfter.Format("2006-01-02"),
+		cert.NotAfter.Format(DayFormat),
 		days,
 	)
 }
