@@ -3,26 +3,23 @@ package main
 import (
 	"crypto/tls"
 	"fmt"
-	"os"
+
+	go_arg "github.com/alexflint/go-arg"
 )
 
-func main() {
-	args := os.Args[1:]
-	domain := "google.com"
-	port := "443"
+var args struct {
+	Domain string `arg:"required,positional"`
+	Port   string `arg:"positional" default:"443"`
+}
 
-	if len(args) > 0 {
-		domain = args[0]
-	}
-	if len(args) > 1 {
-		port = args[1]
-	}
+func main() {
+	go_arg.MustParse(&args)
 
 	conf := &tls.Config{
 		InsecureSkipVerify: true,
 	}
 
-	conn, err := tls.Dial("tcp", domain+":"+port, conf)
+	conn, err := tls.Dial("tcp", args.Domain+":"+args.Port, conf)
 	if err != nil {
 		panic(err)
 	}
