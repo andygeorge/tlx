@@ -1,14 +1,22 @@
 # `tlx`
+
 Simple utility to retrieve TLS certificate expiration dates.
 
-#### Installation
+### Installation
 
 ```sh
-go install -v github.com/andygeorge/tlx@v0.0.1
+VERSION="v0.0.2"; GH="github.com/andygeorge/tlx"; GOPRIVATE=$GH go install -v $GH@$VERSION
 ```
 
-#### Usage
+### Usage
 
 ```sh
 tlx DOMAIN [PORT]
+```
+
+eg:
+
+```
+$ tlx google.com
+*.google.com expires 2023-05-29 (in 62 days)
 ```
