@@ -1,4 +1,4 @@
-package tlx
+package main
 
 import (
 	"crypto/tls"
