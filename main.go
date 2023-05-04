@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	DayFormat string = "2006-01-02"
+	DayFormat string = "2006-01-02 15:04 MST"
 )
 
 var args struct {
