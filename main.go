@@ -20,9 +20,9 @@ var args struct {
 func main() {
 	now := time.Now()
 	go_arg.MustParse(&args)
-	conf := &tls.Config{InsecureSkipVerify: true}
+	tls_config := &tls.Config{InsecureSkipVerify: true}
 
-	conn, err := tls.Dial("tcp", args.Domain+":"+args.Port, conf)
+	conn, err := tls.Dial("tcp", args.Domain+":"+args.Port, tls_config)
 	if err != nil {
 		panic(err)
 	}
