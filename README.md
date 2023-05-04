@@ -16,7 +16,7 @@ tlx DOMAIN [PORT]
 
 eg:
 
-```
+```sh
 $ tlx google.com
 *.google.com expires 2023-06-26 08:17 UTC (in 53 days)
 ```
