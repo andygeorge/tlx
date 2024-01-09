@@ -10,16 +10,24 @@ import (
 
 const (
 	DayFormat string = "2006-01-02 15:04 MST"
+	Version   string = "1.0.0"
 )
 
-var args struct {
+type args struct {
 	Domain string `arg:"required,positional"`
 	Port   string `arg:"positional" default:"443"`
 }
 
+func (args) Version() string {
+	return "tlx " + Version
+}
+
 func main() {
 	now := time.Now()
+
+	var args args
 	go_arg.MustParse(&args)
+
 	tls_config := &tls.Config{InsecureSkipVerify: true}
 
 	conn, err := tls.Dial("tcp", args.Domain+":"+args.Port, tls_config)
