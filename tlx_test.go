@@ -9,39 +9,61 @@ import (
 	"math/big"
 	"net"
 	"os"
+	"strings"
 	"testing"
 	"time"
+
+	goarg "github.com/alexflint/go-arg"
 )
 
-// TestVersion tests the version string
 func TestVersion(t *testing.T) {
-	var a args
-	if got := a.Version(); got != "tlx "+Version {
-		t.Errorf("Version() = %v, want %v", got, "tlx "+Version)
+	tests := []struct {
+		name     string
+		expected string
+	}{
+		{
+			name:     "correct version string",
+			expected: "tlx " + version,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var a args
+			if got := a.Version(); got != tt.expected {
+				t.Errorf("Version() = %v, want %v", got, tt.expected)
+			}
+		})
 	}
 }
 
-// TestParseArgs tests the argument parsing functionality
 func TestParseArgs(t *testing.T) {
-	// Save original args and restore them after the test
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
+	originalArgs := os.Args
+	defer func() { os.Args = originalArgs }()
 
 	tests := []struct {
-		name     string
-		args     []string
-		expected args
-		wantErr  bool
+		name        string
+		args        []string
+		wantDomain  string
+		wantPort    string
+		shouldError bool
 	}{
 		{
-			name:     "domain and port",
-			args:     []string{"tlx", "example.com", "443"},
-			expected: args{Domain: "example.com", Port: "443"},
+			name:       "domain and port specified",
+			args:       []string{"prog", "example.com", "8443"},
+			wantDomain: "example.com",
+			wantPort:   "8443",
 		},
 		{
-			name:     "domain only",
-			args:     []string{"tlx", "example.com"},
-			expected: args{Domain: "example.com", Port: "443"},
+			name:       "domain only - default port",
+			args:       []string{"prog", "example.com"},
+			wantDomain: "example.com",
+			wantPort:   "443",
+		},
+		{
+			name:        "no arguments",
+			args:        []string{"prog"},
+			shouldError: true,
 		},
 	}
 
@@ -49,21 +71,36 @@ func TestParseArgs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			os.Args = tt.args
 			var got args
-			err := parseArgs(&got)
-			if err != nil && !tt.wantErr {
-				t.Errorf("parseArgs() error = %v, wantErr %v", err, tt.wantErr)
+			err := goarg.Parse(&got)
+
+			if tt.shouldError {
+				if err == nil {
+					t.Error("Parse() expected error, got nil")
+				}
 				return
 			}
-			if got.Domain != tt.expected.Domain || got.Port != tt.expected.Port {
-				t.Errorf("parseArgs() = %v, want %v", got, tt.expected)
+
+			if err != nil {
+				t.Fatalf("Parse() unexpected error: %v", err)
+			}
+
+			if got.Domain != tt.wantDomain {
+				t.Errorf("Parse() domain = %v, want %v", got.Domain, tt.wantDomain)
+			}
+			if got.Port != tt.wantPort {
+				t.Errorf("Parse() port = %v, want %v", got.Port, tt.wantPort)
 			}
 		})
 	}
 }
 
-// Helper function to create a test certificate
+type testServer struct {
+	listener net.Listener
+	cert     tls.Certificate
+}
+
 func createTestCert(t *testing.T, domain string, notBefore, notAfter time.Time) (tls.Certificate, error) {
-	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		return tls.Certificate{}, err
 	}
@@ -81,20 +118,15 @@ func createTestCert(t *testing.T, domain string, notBefore, notAfter time.Time) 
 		BasicConstraintsValid: true,
 	}
 
-	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &privateKey.PublicKey, privateKey)
 	if err != nil {
 		return tls.Certificate{}, err
 	}
 
 	return tls.Certificate{
-		Certificate: [][]byte{derBytes},
-		PrivateKey:  priv,
+		Certificate: [][]byte{certDER},
+		PrivateKey:  privateKey,
 	}, nil
-}
-
-type testServer struct {
-	listener net.Listener
-	cert     tls.Certificate
 }
 
 func newTestServer(t *testing.T, domain string, notBefore, notAfter time.Time) (*testServer, error) {
@@ -105,6 +137,7 @@ func newTestServer(t *testing.T, domain string, notBefore, notAfter time.Time) (
 
 	config := &tls.Config{
 		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS12,
 	}
 
 	listener, err := tls.Listen("tcp", "127.0.0.1:0", config)
@@ -127,12 +160,11 @@ func (s *testServer) serve() {
 		if err != nil {
 			return
 		}
-		go func() {
-			defer conn.Close()
-			// Read some data to complete the handshake
-			buf := make([]byte, 1)
-			conn.Read(buf)
-		}()
+		go func(c net.Conn) {
+			defer c.Close()
+			buffer := make([]byte, 1)
+			c.Read(buffer)
+		}(conn)
 	}
 }
 
@@ -144,28 +176,35 @@ func (s *testServer) addr() string {
 	return s.listener.Addr().String()
 }
 
-// TestCheckCertificate tests the certificate checking functionality
-func TestCheckCertificate(t *testing.T) {
+func TestCertChecker(t *testing.T) {
 	now := time.Now()
 	domain := "test.example.com"
 
 	tests := []struct {
-		name      string
-		notBefore time.Time
-		notAfter  time.Time
-		wantDays  float64
+		name          string
+		notBefore     time.Time
+		notAfter      time.Time
+		expectedDays  float64
+		expectError   bool
+		errorContains string
 	}{
 		{
-			name:      "valid certificate",
-			notBefore: now.Add(-24 * time.Hour),
-			notAfter:  now.Add(30 * 24 * time.Hour),
-			wantDays:  30,
+			name:         "valid certificate - 30 days remaining",
+			notBefore:    now.Add(-24 * time.Hour),
+			notAfter:     now.Add(30 * 24 * time.Hour),
+			expectedDays: 30,
 		},
 		{
-			name:      "expired certificate",
-			notBefore: now.Add(-48 * time.Hour),
-			notAfter:  now.Add(-24 * time.Hour),
-			wantDays:  -1,
+			name:         "near expiration - 7 days remaining",
+			notBefore:    now.Add(-24 * time.Hour),
+			notAfter:     now.Add(7 * 24 * time.Hour),
+			expectedDays: 7,
+		},
+		{
+			name:         "expired certificate",
+			notBefore:    now.Add(-48 * time.Hour),
+			notAfter:     now.Add(-24 * time.Hour),
+			expectedDays: -1,
 		},
 	}
 
@@ -177,47 +216,75 @@ func TestCheckCertificate(t *testing.T) {
 			}
 			defer server.close()
 
-			// Create a client connection
-			config := &tls.Config{
-				InsecureSkipVerify: true,
-			}
-
-			conn, err := tls.Dial("tcp", server.addr(), config)
+			host, port, err := net.SplitHostPort(server.addr())
 			if err != nil {
-				t.Fatalf("Failed to connect to test server: %v", err)
+				t.Fatalf("Failed to split host/port: %v", err)
 			}
-			defer conn.Close()
 
-			// Send some data to complete the handshake
-			_, err = conn.Write([]byte("test"))
+			checker := NewCertChecker(host, port)
+			expireDate, certDomain, err := checker.Check()
+
+			if tt.expectError {
+				if err == nil {
+					t.Error("Expected error but got nil")
+				} else if tt.errorContains != "" && !strings.Contains(err.Error(), tt.errorContains) {
+					t.Errorf("Expected error containing %q but got %q", tt.errorContains, err.Error())
+				}
+				return
+			}
+
 			if err != nil {
-				t.Fatalf("Failed to write to connection: %v", err)
+				t.Fatalf("Unexpected error: %v", err)
 			}
 
-			cert := conn.ConnectionState().PeerCertificates[0]
-			expireDate, err := time.Parse(DayFormat, cert.NotAfter.Format(DayFormat))
-			if err != nil {
-				t.Fatalf("Failed to parse expiry date: %v", err)
+			if certDomain != domain {
+				t.Errorf("Expected domain %q but got %q", domain, certDomain)
 			}
 
-			days := expireDate.Sub(now).Hours() / 24
-			if days < tt.wantDays-1 || days > tt.wantDays+1 {
-				t.Errorf("Got %.0f days until expiry, want %.0f", days, tt.wantDays)
+			days := calculateDaysRemaining(*expireDate)
+			// Allow for small timing differences
+			if days < tt.expectedDays-1 || days > tt.expectedDays+1 {
+				t.Errorf("Expected approximately %.0f days, got %.0f", tt.expectedDays, days)
 			}
 		})
 	}
 }
 
-// Helper function to parse args without using go-arg directly in tests
-func parseArgs(args *args) error {
-	if len(os.Args) < 2 {
-		return nil
+func TestCalculateDaysRemaining(t *testing.T) {
+	now := time.Now()
+	tests := []struct {
+		name       string
+		expireDate time.Time
+		want       float64
+	}{
+		{
+			name:       "30 days remaining",
+			expireDate: now.Add(30 * 24 * time.Hour),
+			want:       30,
+		},
+		{
+			name:       "7 days remaining",
+			expireDate: now.Add(7 * 24 * time.Hour),
+			want:       7,
+		},
+		{
+			name:       "1 day remaining",
+			expireDate: now.Add(24 * time.Hour),
+			want:       1,
+		},
+		{
+			name:       "expired 1 day ago",
+			expireDate: now.Add(-24 * time.Hour),
+			want:       -1,
+		},
 	}
-	args.Domain = os.Args[1]
-	if len(os.Args) > 2 {
-		args.Port = os.Args[2]
-	} else {
-		args.Port = "443"
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := calculateDaysRemaining(tt.expireDate)
+			if got < tt.want-0.1 || got > tt.want+0.1 {
+				t.Errorf("calculateDaysRemaining() = %v, want %v", got, tt.want)
+			}
+		})
 	}
-	return nil
 }
