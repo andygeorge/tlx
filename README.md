@@ -6,7 +6,7 @@ Simple utility to retrieve TLS certificate expiration dates.
 
 ```sh
 # install go
-sh -c 'VERSION="v2.0.0"; GH="github.com/andygeorge/tlx"; GOPRIVATE=$GH go install -v $GH@$VERSION'
+sh -c 'VERSION="v2.0.0"; GH="github.com/andygeorge/tlx/v2"; GOPRIVATE=$GH go install -v $GH@$VERSION'
 ```
 
 ## Usage
