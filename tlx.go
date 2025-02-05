@@ -13,7 +13,7 @@ import (
 
 const (
 	dayFormat = "2006-01-02 15:04 MST" // Using Go's reference time format
-	version   = "2.0.0"
+	version   = "1.2.0"
 )
 
 type args struct {

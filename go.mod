@@ -1,4 +1,4 @@
-module github.com/andygeorge/tlx/v2
+module github.com/andygeorge/tlx
 
 go 1.23.6
 
