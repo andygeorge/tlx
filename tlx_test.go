@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	goarg "github.com/alexflint/go-arg"
+	go_arg "github.com/alexflint/go-arg"
 )
 
 func TestVersion(t *testing.T) {
@@ -71,7 +71,7 @@ func TestParseArgs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			os.Args = tt.args
 			var got args
-			err := goarg.Parse(&got)
+			err := go_arg.Parse(&got)
 
 			if tt.shouldError {
 				if err == nil {
